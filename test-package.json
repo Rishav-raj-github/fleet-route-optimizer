@@ -1,0 +1,81 @@
+{
+  "name": "openroute-optimizer-tests",
+  "version": "1.0.0",
+  "description": "Test suite for OpenRoute Optimizer platform",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --ci --coverage --watchAll=false",
+    "test:unit": "jest --testPathPattern=unit",
+    "test:integration": "jest --testPathPattern=integration",
+    "test:e2e": "cypress run",
+    "test:e2e:open": "cypress open",
+    "test:api": "newman run test-collections/openroute-api.postman_collection.json",
+    "test:performance": "npm run benchmark && npm run load-test",
+    "test:mobile": "cypress run --config viewportWidth=375,viewportHeight=667",
+    "test:browsers": "cypress run --browser chrome,firefox,edge",
+    "test:visual": "chromatic --project-token=$CHROMATIC_TOKEN",
+    "test:realtime": "jest --testPathPattern=realtime",
+    "test:database": "jest --testPathPattern=database",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
+    "benchmark": "node test-scripts/benchmark.js",
+    "load-test": "artillery run test-configs/load-test.yml",
+    "start:test-env": "docker-compose -f docker-compose.test.yml up -d",
+    "stop:test-env": "docker-compose -f docker-compose.test.yml down",
+    "reset:test-env": "npm run stop:test-env && npm run start:test-env",
+    "generate:test-data": "node test-scripts/generate-test-data.js",
+    "start:gps-simulator": "node test-scripts/gps-simulator.js",
+    "start:ws-server": "node test-scripts/websocket-server.js",
+    "db:reset:test": "npm run db:drop:test && npm run db:create:test && npm run db:seed:test",
+    "db:create:test": "createdb openroute_test",
+    "db:drop:test": "dropdb --if-exists openroute_test",
+    "db:seed:test": "node test-scripts/seed-database.js",
+    "db:ping": "pg_isready -h localhost -p 5432",
+    "test:report": "jest --coverage && open coverage/lcov-report/index.html"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^5.16.5",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^14.4.3",
+    "jest": "^29.3.1",
+    "jest-environment-jsdom": "^29.3.1",
+    "cypress": "^12.3.0",
+    "@cypress/webpack-preprocessor": "^5.17.0",
+    "artillery": "^2.0.0",
+    "newman": "^5.3.2",
+    "chromatic": "^6.14.0",
+    "supertest": "^6.3.3",
+    "ws": "^8.11.0",
+    "socket.io-client": "^4.5.4",
+    "benchmark": "^2.1.4",
+    "faker": "^5.5.3",
+    "pg": "^8.8.0",
+    "redis": "^4.5.1"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": ["<rootDir>/test-setup.js"],
+    "collectCoverageFrom": [
+      "packages/**/*.{js,ts,tsx}",
+      "!packages/**/node_modules/**",
+      "!packages/**/dist/**",
+      "!**/*.d.ts"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 80,
+        "functions": 80,
+        "lines": 80,
+        "statements": 80
+      }
+    },
+    "moduleNameMapping": {
+      "\\.(css|less|scss|sass)$": "identity-obj-proxy"
+    },
+    "testMatch": [
+      "**/__tests__/**/*.(js|ts|tsx)",
+      "**/*.(test|spec).(js|ts|tsx)"
+    ]
+  }
+}

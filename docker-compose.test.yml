@@ -1,0 +1,119 @@
+version: "3.8"
+
+services:
+  # Test Database
+  postgres-test:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: openroute_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+      - ./test-scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d openroute_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Test Redis
+  redis-test:
+    image: redis:6-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_test_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Test WebSocket Server
+  websocket-test:
+    build:
+      context: .
+      dockerfile: test-dockerfiles/Dockerfile.websocket-test
+    ports:
+      - "8082:8081"
+    environment:
+      - NODE_ENV=test
+      - WS_PORT=8081
+    depends_on:
+      - redis-test
+    volumes:
+      - ./test-scripts:/app/test-scripts
+
+  # Test API Server
+  api-test:
+    build:
+      context: .
+      dockerfile: test-dockerfiles/Dockerfile.api-test
+    ports:
+      - "8001:8000"
+    environment:
+      - NODE_ENV=test
+      - DATABASE_URL=postgres://test_user:test_password@postgres-test:5432/openroute_test
+      - REDIS_URL=redis://redis-test:6379
+      - JWT_SECRET=test-secret-key
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    volumes:
+      - ./packages:/app/packages
+      - ./test-scripts:/app/test-scripts
+
+  # Test Web Interface
+  web-test:
+    build:
+      context: ./packages/web
+      dockerfile: ../../test-dockerfiles/Dockerfile.web-test
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=test
+      - REACT_APP_API_URL=http://localhost:8001
+      - REACT_APP_WS_URL=ws://localhost:8082
+    depends_on:
+      - api-test
+      - websocket-test
+    volumes:
+      - ./packages/web/src:/app/src
+
+  # Test Load Balancer
+  nginx-test:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./test-configs/nginx-test.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - api-test
+      - web-test
+
+  # Test Monitoring
+  prometheus-test:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./test-configs/prometheus-test.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+
+volumes:
+  postgres_test_data:
+  redis_test_data:
+
+networks:
+  default:
+    name: openroute-test-network

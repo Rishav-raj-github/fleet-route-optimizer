@@ -1,78 +1,114 @@
 {
-  "name": "leaflet",
-  "version": "2.0.0-alpha.1",
-  "homepage": "https://leafletjs.com/",
-  "description": "JavaScript library for mobile-friendly interactive maps",
-  "devDependencies": {
-    "@mapbox/eslint-plugin-script-tags": "^1.0.0",
-    "@rollup/plugin-json": "^6.1.0",
-    "bundlemon": "^3.1.0",
-    "chai": "^6.0.1",
-    "eslint": "^9.36.0",
-    "eslint-config-mourner": "^4.1.0",
-    "eslint-plugin-import-x": "^4.16.1",
-    "http-server": "^14.1.1",
-    "husky": "^9.1.7",
-    "karma": "^6.4.4",
-    "karma-chrome-launcher": "^3.2.0",
-    "karma-coverage": "^2.2.1",
-    "karma-firefox-launcher": "^2.1.3",
-    "karma-mocha": "^2.0.1",
-    "karma-safarinative-launcher": "^1.1.0",
-    "karma-time-stats-reporter": "^0.1.0",
-    "leafdoc": "^2.3.0",
-    "lint-staged": "^16.2.0",
-    "mocha": "^11.7.2",
-    "prosthetic-hand": "^2.0.0",
-    "rollup": "^4.52.0",
-    "rollup-plugin-git-version": "^0.3.1",
-    "simple-git": "^3.28.0",
-    "sinon": "^21.0.0",
-    "ssri": "^12.0.0",
-    "uglify-js": "^3.19.3",
-    "ui-event-simulator": "^2.0.0"
-  },
-  "type": "module",
-  "exports": {
-    "./src/": "./src/",
-    "./dist/": "./dist/",
-    ".": "./dist/leaflet-src.js"
-  },
-  "style": "dist/leaflet.css",
-  "files": [
-    "dist",
-    "src",
-    "!dist/leaflet.zip",
-    "!*.leafdoc",
-    "CHANGELOG.md"
+  "name": "fleet-route-optimizer",
+  "version": "1.0.0",
+  "description": "Open source fleet management and route optimization platform with real-time GPS tracking",
+  "homepage": "https://github.com/vkondepati/fleet-route-optimizer",
+  "keywords": [
+    "fleet-management",
+    "route-optimization",
+    "vehicle-routing-problem",
+    "gps-tracking",
+    "logistics",
+    "delivery",
+    "transportation",
+    "real-time",
+    "leaflet",
+    "maps",
+    "routing",
+    "optimization",
+    "typescript",
+    "react"
   ],
-  "scripts": {
-    "debug": "http-server -c-1",
-    "docs": "node ./build/docs.js && node ./build/integrity.js",
-    "test": "karma start ./spec/karma.conf.cjs",
-    "coverage": "karma start ./spec/karma.conf.cjs --coverage --single-run",
-    "build": "npm run rollup && npm run uglify && npm run uglify-global",
-    "lint": "eslint .",
-    "lintfix": "npm run lint -- --fix",
-    "rollup": "rollup -c build/rollup-config.js",
-    "watch": "rollup -w -c build/rollup-config.js",
-    "uglify": "uglifyjs dist/leaflet-src.js -c -m -o dist/leaflet.js --source-map filename=dist/leaflet.js.map --source-map content=dist/leaflet-src.js.map --source-map url=leaflet.js.map --comments",
-    "uglify-global": "uglifyjs dist/leaflet-global-src.js -c -m -o dist/leaflet-global.js --source-map filename=dist/leaflet-global.js.map --source-map content=dist/leaflet-global-src.js.map --source-map url=leaflet-global.js.map --comments",
-    "bundlemon": "bundlemon",
-    "serve": "cd docs && bundle exec jekyll serve",
-    "prepare": "husky",
-    "version": "node ./build/version.js && git add ./src/Leaflet.js"
-  },
+  "author": "Fleet Route Optimizer Contributors",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git://github.com/Leaflet/Leaflet.git"
+    "url": "https://github.com/vkondepati/fleet-route-optimizer.git"
   },
-  "keywords": [
-    "gis",
-    "map"
-  ],
-  "license": "BSD-2-Clause",
-  "lint-staged": {
-    "*.(js|mjs|md)": "eslint --cache --fix"
+  "bugs": {
+    "url": "https://github.com/vkondepati/fleet-route-optimizer/issues"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "nodemon src/api/server.ts",
+    "dev:web": "vite",
+    "build": "npm run build:api && npm run build:web",
+    "build:api": "tsc -p tsconfig.api.json",
+    "build:web": "vite build",
+    "test": "jest",
+    "test:unit": "jest --testMatch='**/*.unit.test.ts'",
+    "test:integration": "jest --testMatch='**/*.integration.test.ts'",
+    "test:e2e": "cypress run",
+    "test:performance": "artillery run tests/performance/load-test.yml",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.{ts,tsx} --fix",
+    "typecheck": "tsc --noEmit",
+    "db:setup": "node scripts/setup-database.js",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js",
+    "docker:build": "docker build -t fleet-route-optimizer .",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docs:build": "typedoc src/index.ts",
+    "docs:serve": "http-server docs -p 8080",
+    "start": "node dist/api/server.js",
+    "start:prod": "NODE_ENV=production npm start"
+  },
+  "dependencies": {
+    "@types/ws": "^8.5.10",
+    "express": "^4.18.2",
+    "leaflet": "^2.0.0-alpha.1",
+    "pg": "^8.11.3",
+    "redis": "^4.6.10",
+    "socket.io": "^4.7.4",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^13.4.0",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.9.0",
+    "@types/pg": "^8.10.7",
+    "@types/react": "^18.2.38",
+    "@types/react-dom": "^18.2.17",
+    "@typescript-eslint/eslint-plugin": "^6.12.0",
+    "@typescript-eslint/parser": "^6.12.0",
+    "@vitejs/plugin-react": "^4.1.1",
+    "artillery": "^2.0.3",
+    "concurrently": "^8.2.2",
+    "cypress": "^13.6.0",
+    "eslint": "^8.54.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "http-server": "^14.1.1",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "ts-jest": "^29.1.1",
+    "ts-node": "^10.9.1",
+    "typedoc": "^0.25.4",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }
