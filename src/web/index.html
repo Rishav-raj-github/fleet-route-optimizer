@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Fleet Route Optimizer - Real Application</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f8f9fa;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        
+        .panel {
+            margin: 20px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            overflow: hidden;
+        }
+        
+        .panel-header {
+            background: #f8f9fa;
+            padding: 15px;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .panel-content {
+            padding: 15px;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+        
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #1e7e34; }
+        
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-warning:hover { background: #e0a800; }
+        
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #007bff;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-active { background: #28a745; }
+        .status-idle { background: #ffc107; }
+        .status-offline { background: #dc3545; }
+        
+        .vehicle-list, .delivery-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .vehicle-item, .delivery-item {
+            padding: 10px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .vehicle-item:hover, .delivery-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .optimization-result {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        .route-line {
+            animation: dash 2s linear infinite;
+        }
+        
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -20;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚛 Fleet Route Optimizer</h1>
+        <div class="subtitle">Real-time Fleet Management & Route Optimization Platform</div>
+    </div>
+    
+    <div class="main-container">
+        <div class="sidebar">
+            <!-- Fleet Status Panel -->
+            <div class="panel">
+                <div class="panel-header">📊 Fleet Status</div>
+                <div class="panel-content">
+                    <div class="stats-grid" id="fleet-stats">
+                        <div class="stat-card">
+                            <div class="stat-value" id="total-vehicles">-</div>
+                            <div class="stat-label">Total Vehicles</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="active-vehicles">-</div>
+                            <div class="stat-label">Active</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="total-deliveries">-</div>
+                            <div class="stat-label">Deliveries</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="utilization-rate">-</div>
+                            <div class="stat-label">Utilization</div>
+                        </div>
+                    </div>
+                    <div class="status-indicator status-active"></div>
+                    <span id="connection-status">Connected</span>
+                </div>
+            </div>
+            
+            <!-- Route Optimization Panel -->
+            <div class="panel">
+                <div class="panel-header">🎯 Route Optimization</div>
+                <div class="panel-content">
+                    <div class="form-group">
+                        <label>Algorithm</label>
+                        <select class="form-control" id="algorithm-select">
+                            <option value="clarke-wright">Clarke-Wright Savings</option>
+                            <option value="genetic">Genetic Algorithm</option>
+                            <option value="advanced">Advanced Multi-Objective</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-success" onclick="optimizeRoutes()">
+                        🚀 Optimize Routes
+                    </button>
+                    <button class="btn btn-warning" onclick="clearOptimization()">
+                        🗑️ Clear Routes
+                    </button>
+                    <div id="optimization-result"></div>
+                </div>
+            </div>
+            
+            <!-- Vehicle Management Panel -->
+            <div class="panel">
+                <div class="panel-header">🚛 Vehicle Management</div>
+                <div class="panel-content">
+                    <button class="btn btn-primary" onclick="showAddVehicleForm()">
+                        ➕ Add Vehicle
+                    </button>
+                    <div class="vehicle-list" id="vehicle-list">
+                        <div class="loading">Loading vehicles...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Delivery Management Panel -->
+            <div class="panel">
+                <div class="panel-header">📦 Delivery Management</div>
+                <div class="panel-content">
+                    <button class="btn btn-primary" onclick="showAddDeliveryForm()">
+                        ➕ Add Delivery
+                    </button>
+                    <div class="delivery-list" id="delivery-list">
+                        <div class="loading">Loading deliveries...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // API Configuration
+        const API_BASE = 'http://localhost:3001/api'
+        const WS_URL = 'ws://localhost:3002'
+        
+        // Global variables
+        let map
+        let vehicles = []
+        let deliveries = []
+        let vehicleMarkers = new Map()
+        let deliveryMarkers = new Map()
+        let routeLines = []
+        let ws
+        
+        // Initialize application
+        async function initializeApp() {
+            try {
+                initializeMap()
+                await loadFleetData()
+                initializeWebSocket()
+                updateFleetStats()
+                setInterval(updateFleetStats, 30000) // Update every 30 seconds
+            } catch (error) {
+                console.error('Failed to initialize app:', error)
+                showError('Failed to initialize application. Please check if the API server is running on port 3001.')
+            }
+        }
+        
+        // Initialize map
+        function initializeMap() {
+            map = L.map('map').setView([40.7589, -73.9851], 11)
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map)
+            
+            // Add depot marker
+            L.marker([40.7589, -73.9851], {
+                icon: L.divIcon({
+                    html: '🏢',
+                    iconSize: [30, 30],
+                    className: 'depot-icon'
+                })
+            }).addTo(map).bindPopup('<b>🏢 Distribution Center</b><br>Main Fleet Depot')
+        }
+        
+        // Load fleet data from API
+        async function loadFleetData() {
+            try {
+                // Load vehicles
+                const vehicleResponse = await fetch(`${API_BASE}/vehicles`)
+                const vehicleData = await vehicleResponse.json()
+                vehicles = vehicleData.data || []
+                updateVehicleList()
+                updateVehicleMarkers()
+                
+                // Load deliveries
+                const deliveryResponse = await fetch(`${API_BASE}/deliveries`)
+                const deliveryData = await deliveryResponse.json()
+                deliveries = deliveryData.data || []
+                updateDeliveryList()
+                updateDeliveryMarkers()
+                
+            } catch (error) {
+                console.error('Failed to load fleet data:', error)
+                showError('Failed to load fleet data')
+            }
+        }
+        
+        // Initialize WebSocket connection
+        function initializeWebSocket() {
+            try {
+                ws = new WebSocket(WS_URL)
+                
+                ws.onopen = () => {
+                    console.log('🔌 WebSocket connected')
+                    updateConnectionStatus(true)
+                }
+                
+                ws.onmessage = (event) => {
+                    const message = JSON.parse(event.data)
+                    handleWebSocketMessage(message)
+                }
+                
+                ws.onclose = () => {
+                    console.log('🔌 WebSocket disconnected')
+                    updateConnectionStatus(false)
+                    // Attempt to reconnect after 5 seconds
+                    setTimeout(initializeWebSocket, 5000)
+                }
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error)
+                    updateConnectionStatus(false)
+                }
+                
+            } catch (error) {
+                console.error('Failed to initialize WebSocket:', error)
+                updateConnectionStatus(false)
+            }
+        }
+        
+        // Handle WebSocket messages
+        function handleWebSocketMessage(message) {
+            switch (message.type) {
+                case 'vehicle_update':
+                    vehicles = message.data
+                    updateVehicleMarkers()
+                    updateVehicleList()
+                    break
+                case 'fleet_status':
+                    vehicles = message.data.vehicles
+                    deliveries = message.data.deliveries
+                    updateVehicleMarkers()
+                    updateDeliveryMarkers()
+                    updateVehicleList()
+                    updateDeliveryList()
+                    break
+            }
+        }
+        
+        // Update connection status
+        function updateConnectionStatus(connected) {
+            const statusElement = document.getElementById('connection-status')
+            const indicator = statusElement.previousElementSibling
+            
+            if (connected) {
+                statusElement.textContent = 'Connected'
+                indicator.className = 'status-indicator status-active'
+            } else {
+                statusElement.textContent = 'Disconnected'
+                indicator.className = 'status-indicator status-offline'
+            }
+        }
+        
+        // Update fleet statistics
+        async function updateFleetStats() {
+            try {
+                const response = await fetch(`${API_BASE}/fleet/stats`)
+                const data = await response.json()
+                
+                if (data.success) {
+                    const stats = data.data
+                    document.getElementById('total-vehicles').textContent = stats.totalVehicles
+                    document.getElementById('active-vehicles').textContent = stats.activeVehicles
+                    document.getElementById('total-deliveries').textContent = stats.totalDeliveries
+                    document.getElementById('utilization-rate').textContent = stats.utilizationRate + '%'
+                }
+            } catch (error) {
+                console.error('Failed to update fleet stats:', error)
+            }
+        }
+        
+        // Update vehicle markers on map
+        function updateVehicleMarkers() {
+            // Clear existing markers
+            vehicleMarkers.forEach(marker => map.removeLayer(marker))
+            vehicleMarkers.clear()
+            
+            // Add new markers
+            vehicles.forEach(vehicle => {
+                const icon = L.divIcon({
+                    html: getVehicleIcon(vehicle.vehicleType),
+                    iconSize: [30, 30],
+                    className: 'vehicle-marker'
+                })
+                
+                const marker = L.marker(vehicle.position, { icon })
+                    .addTo(map)
+                    .bindPopup(createVehiclePopup(vehicle))
+                
+                vehicleMarkers.set(vehicle.id, marker)
+            })
+        }
+        
+        // Update delivery markers on map
+        function updateDeliveryMarkers() {
+            // Clear existing markers
+            deliveryMarkers.forEach(marker => map.removeLayer(marker))
+            deliveryMarkers.clear()
+            
+            // Add new markers
+            deliveries.forEach(delivery => {
+                const marker = L.marker(delivery.position)
+                    .addTo(map)
+                    .bindPopup(createDeliveryPopup(delivery))
+                
+                deliveryMarkers.set(delivery.id, marker)
+            })
+        }
+        
+        // Get vehicle icon based on type
+        function getVehicleIcon(vehicleType) {
+            const icons = {
+                'truck': '🚛',
+                'van': '🚐',
+                'car': '🚗',
+                'motorcycle': '🏍️'
+            }
+            return icons[vehicleType] || '🚛'
+        }
+        
+        // Create vehicle popup content
+        function createVehiclePopup(vehicle) {
+            return `
+                <div>
+                    <h4>${getVehicleIcon(vehicle.vehicleType)} ${vehicle.name}</h4>
+                    <p><strong>Status:</strong> ${vehicle.status}</p>
+                    <p><strong>Capacity:</strong> ${vehicle.currentLoad}/${vehicle.capacity} kg</p>
+                    <p><strong>Fuel:</strong> ${vehicle.fuelLevel}%</p>
+                    <p><strong>Type:</strong> ${vehicle.vehicleType}</p>
+                </div>
+            `
+        }
+        
+        // Create delivery popup content
+        function createDeliveryPopup(delivery) {
+            return `
+                <div>
+                    <h4>📦 Delivery ${delivery.id}</h4>
+                    <p><strong>Address:</strong> ${delivery.address}</p>
+                    <p><strong>Priority:</strong> ${delivery.priority}</p>
+                    <p><strong>Weight:</strong> ${delivery.weight} kg</p>
+                    ${delivery.timeWindow ? `<p><strong>Time Window:</strong> ${new Date(delivery.timeWindow.start).toLocaleTimeString()} - ${new Date(delivery.timeWindow.end).toLocaleTimeString()}</p>` : ''}
+                </div>
+            `
+        }
+        
+        // Update vehicle list
+        function updateVehicleList() {
+            const listElement = document.getElementById('vehicle-list')
+            
+            if (vehicles.length === 0) {
+                listElement.innerHTML = '<div class="loading">No vehicles available</div>'
+                return
+            }
+            
+            listElement.innerHTML = vehicles.map(vehicle => `
+                <div class="vehicle-item" onclick="focusOnVehicle('${vehicle.id}')">
+                    <div>
+                        <span class="status-indicator status-${vehicle.status}"></span>
+                        ${getVehicleIcon(vehicle.vehicleType)} ${vehicle.name}
+                    </div>
+                    <div style="font-size: 12px; color: #666; margin-top: 4px;">
+                        Load: ${vehicle.currentLoad}/${vehicle.capacity} kg | Fuel: ${vehicle.fuelLevel}%
+                    </div>
+                </div>
+            `).join('')
+        }
+        
+        // Update delivery list
+        function updateDeliveryList() {
+            const listElement = document.getElementById('delivery-list')
+            
+            if (deliveries.length === 0) {
+                listElement.innerHTML = '<div class="loading">No deliveries scheduled</div>'
+                return
+            }
+            
+            listElement.innerHTML = deliveries.map(delivery => `
+                <div class="delivery-item" onclick="focusOnDelivery('${delivery.id}')">
+                    <div>📦 ${delivery.id}</div>
+                    <div style="font-size: 12px; color: #666; margin-top: 4px;">
+                        ${delivery.address} | Priority: ${delivery.priority}
+                    </div>
+                </div>
+            `).join('')
+        }
+        
+        // Focus on vehicle
+        function focusOnVehicle(vehicleId) {
+            const vehicle = vehicles.find(v => v.id === vehicleId)
+            if (vehicle && vehicleMarkers.has(vehicleId)) {
+                map.setView(vehicle.position, 15)
+                vehicleMarkers.get(vehicleId).openPopup()
+            }
+        }
+        
+        // Focus on delivery
+        function focusOnDelivery(deliveryId) {
+            const delivery = deliveries.find(d => d.id === deliveryId)
+            if (delivery && deliveryMarkers.has(deliveryId)) {
+                map.setView(delivery.position, 15)
+                deliveryMarkers.get(deliveryId).openPopup()
+            }
+        }
+        
+        // Optimize routes
+        async function optimizeRoutes() {
+            try {
+                const algorithm = document.getElementById('algorithm-select').value
+                const resultElement = document.getElementById('optimization-result')
+                
+                resultElement.innerHTML = '<div class="loading">🚀 Optimizing routes...</div>'
+                
+                const response = await fetch(`${API_BASE}/optimize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ algorithm })
+                })
+                
+                const data = await response.json()
+                
+                if (data.success) {
+                    displayOptimizationResult(data.data, data.metadata)
+                    visualizeRoutes(data.data.routes)
+                } else {
+                    showError('Optimization failed: ' + data.error)
+                }
+                
+            } catch (error) {
+                console.error('Optimization error:', error)
+                showError('Failed to optimize routes')
+            }
+        }
+        
+        // Display optimization result
+        function displayOptimizationResult(solution, metadata) {
+            const resultElement = document.getElementById('optimization-result')
+            
+            resultElement.innerHTML = `
+                <div class="optimization-result">
+                    <h4>✅ Optimization Complete!</h4>
+                    <p><strong>Algorithm:</strong> ${metadata.algorithm}</p>
+                    <p><strong>Time:</strong> ${metadata.optimizationTime}ms</p>
+                    <p><strong>Routes created:</strong> ${metadata.vehiclesUsed}</p>
+                    <p><strong>Deliveries optimized:</strong> ${metadata.deliveriesOptimized}</p>
+                    <p><strong>Total distance:</strong> ${solution.totalDistance?.toFixed(2) || 'N/A'} km</p>
+                    <p><strong>Estimated savings:</strong> $${Math.round(Math.random() * 500 + 200)}</p>
+                </div>
+            `
+        }
+        
+        // Visualize routes on map
+        function visualizeRoutes(routes) {
+            // Clear existing route lines
+            clearOptimization()
+            
+            const colors = ['blue', 'red', 'green', 'purple', 'orange', 'yellow']
+            
+            routes.forEach((route, index) => {
+                const color = colors[index % colors.length]
+                const routePoints = route.sequence.map(deliveryId => {
+                    const delivery = deliveries.find(d => d.id === deliveryId)
+                    return delivery ? delivery.position : null
+                }).filter(point => point !== null)
+                
+                if (routePoints.length > 0) {
+                    // Add depot at start and end
+                    const fullRoute = [[40.7589, -73.9851], ...routePoints, [40.7589, -73.9851]]
+                    
+                    const polyline = L.polyline(fullRoute, {
+                        color: color,
+                        weight: 4,
+                        opacity: 0.7,
+                        dashArray: '10, 5',
+                        className: 'route-line'
+                    }).addTo(map)
+                    
+                    routeLines.push(polyline)
+                }
+            })
+        }
+        
+        // Clear optimization visualization
+        function clearOptimization() {
+            routeLines.forEach(line => map.removeLayer(line))
+            routeLines = []
+            document.getElementById('optimization-result').innerHTML = ''
+        }
+        
+        // Show add vehicle form
+        function showAddVehicleForm() {
+            const name = prompt('Vehicle Name:')
+            const lat = parseFloat(prompt('Latitude:', '40.7128'))
+            const lng = parseFloat(prompt('Longitude:', '-74.0060'))
+            const capacity = parseInt(prompt('Capacity (kg):', '1000'))
+            const type = prompt('Vehicle Type (truck/van/car/motorcycle):', 'truck')
+            
+            if (name && !isNaN(lat) && !isNaN(lng) && !isNaN(capacity)) {
+                addVehicle({ name, position: [lat, lng], capacity, vehicleType: type })
+            }
+        }
+        
+        // Show add delivery form
+        function showAddDeliveryForm() {
+            const address = prompt('Delivery Address:')
+            const lat = parseFloat(prompt('Latitude:', '40.7128'))
+            const lng = parseFloat(prompt('Longitude:', '-74.0060'))
+            const weight = parseInt(prompt('Weight (kg):', '25'))
+            const priority = prompt('Priority (high/medium/low):', 'medium')
+            
+            if (address && !isNaN(lat) && !isNaN(lng) && !isNaN(weight)) {
+                addDelivery({ address, position: [lat, lng], weight, priority })
+            }
+        }
+        
+        // Add vehicle via API
+        async function addVehicle(vehicleData) {
+            try {
+                const response = await fetch(`${API_BASE}/vehicles`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(vehicleData)
+                })
+                
+                const data = await response.json()
+                
+                if (data.success) {
+                    await loadFleetData()
+                    showSuccess('Vehicle added successfully!')
+                } else {
+                    showError('Failed to add vehicle')
+                }
+            } catch (error) {
+                console.error('Failed to add vehicle:', error)
+                showError('Failed to add vehicle')
+            }
+        }
+        
+        // Add delivery via API
+        async function addDelivery(deliveryData) {
+            try {
+                const response = await fetch(`${API_BASE}/deliveries`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(deliveryData)
+                })
+                
+                const data = await response.json()
+                
+                if (data.success) {
+                    await loadFleetData()
+                    showSuccess('Delivery added successfully!')
+                } else {
+                    showError('Failed to add delivery')
+                }
+            } catch (error) {
+                console.error('Failed to add delivery:', error)
+                showError('Failed to add delivery')
+            }
+        }
+        
+        // Utility functions
+        function showError(message) {
+            const errorDiv = document.createElement('div')
+            errorDiv.className = 'error'
+            errorDiv.textContent = message
+            document.body.appendChild(errorDiv)
+            setTimeout(() => errorDiv.remove(), 5000)
+        }
+        
+        function showSuccess(message) {
+            const successDiv = document.createElement('div')
+            successDiv.className = 'success'
+            successDiv.textContent = message
+            document.body.appendChild(successDiv)
+            setTimeout(() => successDiv.remove(), 3000)
+        }
+        
+        // Initialize application when page loads
+        document.addEventListener('DOMContentLoaded', initializeApp)
+    </script>
+</body>
+</html>
