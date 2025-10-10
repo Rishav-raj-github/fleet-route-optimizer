@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fleet Route Optimizer - PostgreSQL + PostGIS</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header .subtitle {
+            color: #7f8c8d;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            background: #2ecc71;
+            color: white;
+        }
+
+        .main-container {
+            display: flex;
+            gap: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            min-height: calc(100vh - 200px);
+        }
+
+        .left-panel {
+            width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .panel h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+        }
+
+        .stat-card h4 {
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-card p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .input-group label {
+            font-weight: 600;
+            color: #34495e;
+        }
+
+        .input-group input, .input-group select {
+            padding: 0.75rem;
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            color: white;
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(46, 204, 113, 0.4);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+            color: white;
+            box-shadow: 0 4px 15px rgba(243, 156, 18, 0.3);
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(243, 156, 18, 0.4);
+        }
+
+        #map {
+            height: 500px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .vehicle-list, .delivery-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .vehicle-item, .delivery-item {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s;
+        }
+
+        .vehicle-item:hover, .delivery-item:hover {
+            background: #e3f2fd;
+            border-color: #3498db;
+            transform: translateX(5px);
+        }
+
+        .vehicle-item h4, .delivery-item h4 {
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+
+        .vehicle-item p, .delivery-item p {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .optimization-results {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .route-summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: white;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: #7f8c8d;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .algorithm-selector {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .algorithm-btn {
+            padding: 0.5rem;
+            border: 2px solid #ecf0f1;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .algorithm-btn.active {
+            border-color: #3498db;
+            background: #e3f2fd;
+            color: #1976d2;
+            font-weight: 600;
+        }
+
+        .websocket-status {
+            font-size: 0.8rem;
+            color: #27ae60;
+        }
+
+        .api-info {
+            background: #e8f5e8;
+            border: 1px solid #c3e6c3;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .api-info h4 {
+            color: #2d5a2d;
+            margin-bottom: 0.5rem;
+        }
+
+        .api-info p {
+            color: #1e4620;
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+                padding: 0 1rem;
+            }
+
+            .left-panel {
+                width: 100%;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚛 Fleet Route Optimizer</h1>
+        <div class="subtitle">
+            <span>PostgreSQL + PostGIS Spatial Database</span>
+            <div class="status-indicator" id="dbStatus">
+                <span>🔄</span>
+                <span>Connecting...</span>
+            </div>
+            <div class="websocket-status" id="wsStatus">WebSocket: Disconnected</div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="left-panel">
+            <!-- API Information -->
+            <div class="panel">
+                <h3>📊 Database Integration</h3>
+                <div class="api-info">
+                    <h4>🗄️ PostgreSQL + PostGIS</h4>
+                    <p>✅ Spatial database with geographic calculations</p>
+                    <p>✅ GEOMETRY columns for vehicle/delivery locations</p>
+                    <p>✅ ST_Distance for accurate geographic routing</p>
+                    <p>✅ Redis caching for optimization results</p>
+                </div>
+            </div>
+
+            <!-- Fleet Statistics -->
+            <div class="panel">
+                <h3>📈 Fleet Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h4 id="totalVehicles">0</h4>
+                        <p>Total Vehicles</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4 id="activeVehicles">0</h4>
+                        <p>Active</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4 id="totalDeliveries">0</h4>
+                        <p>Deliveries</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4 id="pendingDeliveries">0</h4>
+                        <p>Pending</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Route Optimization -->
+            <div class="panel">
+                <h3>🎯 Route Optimization</h3>
+                <div class="algorithm-selector">
+                    <div class="algorithm-btn active" data-algorithm="clarke-wright">Clarke-Wright</div>
+                    <div class="algorithm-btn" data-algorithm="astar">A* Pathfinding</div>
+                    <div class="algorithm-btn" data-algorithm="genetic">Genetic Algorithm</div>
+                    <div class="algorithm-btn" data-algorithm="advanced">Multi-Objective</div>
+                </div>
+                <button class="btn btn-success" onclick="optimizeRoutes()" style="width: 100%;">
+                    🚀 Optimize Routes with PostGIS
+                </button>
+                <div class="loading" id="optimizationLoading">
+                    <p>🔄 Running optimization with spatial calculations...</p>
+                </div>
+                <div id="optimizationResults"></div>
+            </div>
+
+            <!-- Add Vehicle -->
+            <div class="panel">
+                <h3>➕ Add Vehicle</h3>
+                <div class="controls">
+                    <div class="input-group">
+                        <label>Vehicle Name</label>
+                        <input type="text" id="vehicleName" placeholder="e.g., Truck-004">
+                    </div>
+                    <div class="input-group">
+                        <label>Type</label>
+                        <select id="vehicleType">
+                            <option value="truck">Truck</option>
+                            <option value="van">Van</option>
+                            <option value="motorcycle">Motorcycle</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Capacity (kg)</label>
+                        <input type="number" id="vehicleCapacity" placeholder="1000" min="1">
+                    </div>
+                    <div class="input-group">
+                        <label>Driver Name</label>
+                        <input type="text" id="driverName" placeholder="John Doe">
+                    </div>
+                    <button class="btn btn-primary" onclick="addVehicle()">Add Vehicle to Database</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <!-- Map -->
+            <div class="panel">
+                <h3>🗺️ Fleet Map with PostGIS Data</h3>
+                <div id="map"></div>
+            </div>
+
+            <!-- Vehicles and Deliveries -->
+            <div style="display: flex; gap: 1.5rem;">
+                <div class="panel" style="flex: 1;">
+                    <h3>🚚 Vehicles from Database</h3>
+                    <div class="vehicle-list" id="vehicleList">
+                        <div class="loading show">Loading vehicles from PostgreSQL...</div>
+                    </div>
+                </div>
+                <div class="panel" style="flex: 1;">
+                    <h3>📦 Deliveries from Database</h3>
+                    <div class="delivery-list" id="deliveryList">
+                        <div class="loading show">Loading deliveries from PostgreSQL...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Global variables
+        let map;
+        let vehicleMarkers = [];
+        let deliveryMarkers = [];
+        let routePolylines = [];
+        let selectedAlgorithm = 'clarke-wright';
+        let ws;
+
+        // API base URL
+        const API_BASE = 'http://localhost:3001';
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+            checkAPIHealth();
+            loadFleetData();
+            setupAlgorithmSelector();
+            connectWebSocket();
+            
+            // Auto-refresh data every 30 seconds
+            setInterval(loadFleetData, 30000);
+        });
+
+        /**
+         * Initialize the Leaflet map
+         */
+        function initializeMap() {
+            map = L.map('map').setView([37.7749, -122.4194], 12);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Add map click handler for adding deliveries
+            map.on('click', function(e) {
+                const lat = e.latlng.lat;
+                const lng = e.latlng.lng;
+                
+                if (confirm(`Add delivery at ${lat.toFixed(4)}, ${lng.toFixed(4)}?`)) {
+                    addDeliveryAtLocation(lat, lng);
+                }
+            });
+        }
+
+        /**
+         * Check API health and database connection
+         */
+        async function checkAPIHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const health = await response.json();
+                
+                const statusElement = document.getElementById('dbStatus');
+                if (health.status === 'healthy') {
+                    statusElement.innerHTML = '<span>✅</span><span>PostgreSQL + PostGIS Connected</span>';
+                    statusElement.style.background = '#2ecc71';
+                } else {
+                    throw new Error('API unhealthy');
+                }
+                
+                console.log('🏥 Health Check:', health);
+            } catch (error) {
+                console.error('❌ API Health Check Failed:', error);
+                const statusElement = document.getElementById('dbStatus');
+                statusElement.innerHTML = '<span>❌</span><span>Database Disconnected</span>';
+                statusElement.style.background = '#e74c3c';
+            }
+        }
+
+        /**
+         * Connect to WebSocket for real-time updates
+         */
+        function connectWebSocket() {
+            try {
+                ws = new WebSocket('ws://localhost:3002');
+                
+                ws.onopen = function() {
+                    console.log('🔌 WebSocket connected');
+                    document.getElementById('wsStatus').textContent = 'WebSocket: Connected';
+                    document.getElementById('wsStatus').style.color = '#27ae60';
+                };
+                
+                ws.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'fleet_status') {
+                        console.log('📡 Real-time fleet update received');
+                        // Update UI with real-time data
+                    }
+                };
+                
+                ws.onclose = function() {
+                    console.log('🔌 WebSocket disconnected');
+                    document.getElementById('wsStatus').textContent = 'WebSocket: Disconnected';
+                    document.getElementById('wsStatus').style.color = '#e74c3c';
+                };
+                
+                ws.onerror = function(error) {
+                    console.error('❌ WebSocket error:', error);
+                };
+            } catch (error) {
+                console.error('❌ WebSocket connection failed:', error);
+            }
+        }
+
+        /**
+         * Load fleet data from PostgreSQL database
+         */
+        async function loadFleetData() {
+            try {
+                // Load vehicles from database
+                const vehiclesResponse = await fetch(`${API_BASE}/api/vehicles`);
+                const vehiclesData = await vehiclesResponse.json();
+                
+                // Load deliveries from database
+                const deliveriesResponse = await fetch(`${API_BASE}/api/deliveries`);
+                const deliveriesData = await deliveriesResponse.json();
+                
+                // Load fleet statistics
+                const statsResponse = await fetch(`${API_BASE}/api/fleet/stats`);
+                const statsData = await statsResponse.json();
+                
+                // Update UI
+                updateVehiclesList(vehiclesData.data);
+                updateDeliveriesList(deliveriesData.data);
+                updateFleetStatistics(statsData.data);
+                updateMapMarkers(vehiclesData.data, deliveriesData.data);
+                
+                console.log('📊 Fleet data loaded from PostgreSQL:', {
+                    vehicles: vehiclesData.data.length,
+                    deliveries: deliveriesData.data.length
+                });
+                
+            } catch (error) {
+                console.error('❌ Failed to load fleet data:', error);
+            }
+        }
+
+        /**
+         * Update vehicles list in UI
+         */
+        function updateVehiclesList(vehicles) {
+            const vehicleList = document.getElementById('vehicleList');
+            
+            if (vehicles.length === 0) {
+                vehicleList.innerHTML = '<p>No vehicles found in database</p>';
+                return;
+            }
+            
+            vehicleList.innerHTML = vehicles.map(vehicle => `
+                <div class="vehicle-item">
+                    <h4>🚚 ${vehicle.name}</h4>
+                    <p><strong>Type:</strong> ${vehicle.vehicleType}</p>
+                    <p><strong>Capacity:</strong> ${vehicle.capacity} kg</p>
+                    <p><strong>Status:</strong> ${vehicle.status}</p>
+                    <p><strong>Driver:</strong> ${vehicle.driverName || 'Not assigned'}</p>
+                    <p><strong>Location:</strong> ${vehicle.position ? vehicle.position.join(', ') : 'Unknown'}</p>
+                </div>
+            `).join('');
+        }
+
+        /**
+         * Update deliveries list in UI
+         */
+        function updateDeliveriesList(deliveries) {
+            const deliveryList = document.getElementById('deliveryList');
+            
+            if (deliveries.length === 0) {
+                deliveryList.innerHTML = '<p>No deliveries found in database</p>';
+                return;
+            }
+            
+            deliveryList.innerHTML = deliveries.map(delivery => `
+                <div class="delivery-item">
+                    <h4>📦 ${delivery.address}</h4>
+                    <p><strong>Weight:</strong> ${delivery.weight} kg</p>
+                    <p><strong>Priority:</strong> ${delivery.priority}</p>
+                    <p><strong>Status:</strong> ${delivery.status}</p>
+                    <p><strong>Pickup:</strong> ${delivery.pickupAddress || 'Distribution Center'}</p>
+                    <p><strong>Location:</strong> ${delivery.position ? delivery.position.join(', ') : 'Unknown'}</p>
+                </div>
+            `).join('');
+        }
+
+        /**
+         * Update fleet statistics
+         */
+        function updateFleetStatistics(stats) {
+            document.getElementById('totalVehicles').textContent = stats.totalVehicles;
+            document.getElementById('activeVehicles').textContent = stats.activeVehicles;
+            document.getElementById('totalDeliveries').textContent = stats.totalDeliveries;
+            document.getElementById('pendingDeliveries').textContent = stats.pendingDeliveries;
+        }
+
+        /**
+         * Update map markers with data from database
+         */
+        function updateMapMarkers(vehicles, deliveries) {
+            // Clear existing markers
+            vehicleMarkers.forEach(marker => map.removeLayer(marker));
+            deliveryMarkers.forEach(marker => map.removeLayer(marker));
+            vehicleMarkers = [];
+            deliveryMarkers = [];
+
+            // Add vehicle markers
+            vehicles.forEach(vehicle => {
+                if (vehicle.position) {
+                    const icon = L.divIcon({
+                        html: getVehicleIcon(vehicle.vehicleType),
+                        className: 'custom-div-icon',
+                        iconSize: [30, 30]
+                    });
+
+                    const marker = L.marker(vehicle.position, { icon })
+                        .bindPopup(`
+                            <strong>${vehicle.name}</strong><br>
+                            Type: ${vehicle.vehicleType}<br>
+                            Capacity: ${vehicle.capacity} kg<br>
+                            Driver: ${vehicle.driverName || 'Unassigned'}<br>
+                            Status: ${vehicle.status}
+                        `);
+                    
+                    marker.addTo(map);
+                    vehicleMarkers.push(marker);
+                }
+            });
+
+            // Add delivery markers
+            deliveries.forEach(delivery => {
+                if (delivery.position) {
+                    const priorityColor = delivery.priority === 'high' ? '#e74c3c' : 
+                                        delivery.priority === 'medium' ? '#f39c12' : '#95a5a6';
+                    
+                    const icon = L.divIcon({
+                        html: `<div style="background: ${priorityColor}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
+                        className: 'custom-div-icon',
+                        iconSize: [20, 20]
+                    });
+
+                    const marker = L.marker(delivery.position, { icon })
+                        .bindPopup(`
+                            <strong>${delivery.address}</strong><br>
+                            Weight: ${delivery.weight} kg<br>
+                            Priority: ${delivery.priority}<br>
+                            Status: ${delivery.status}<br>
+                            Pickup: ${delivery.pickupAddress || 'Distribution Center'}
+                        `);
+                    
+                    marker.addTo(map);
+                    deliveryMarkers.push(marker);
+                }
+            });
+        }
+
+        /**
+         * Get vehicle icon based on type
+         */
+        function getVehicleIcon(type) {
+            const icons = {
+                truck: '🚛',
+                van: '🚐',
+                motorcycle: '🏍️'
+            };
+            return `<div style="font-size: 20px; text-align: center; line-height: 30px;">${icons[type] || '🚚'}</div>`;
+        }
+
+        /**
+         * Setup algorithm selector
+         */
+        function setupAlgorithmSelector() {
+            document.querySelectorAll('.algorithm-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.algorithm-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    selectedAlgorithm = this.dataset.algorithm;
+                });
+            });
+        }
+
+        /**
+         * Optimize routes using PostgreSQL + PostGIS backend
+         */
+        async function optimizeRoutes() {
+            const loadingElement = document.getElementById('optimizationLoading');
+            const resultsElement = document.getElementById('optimizationResults');
+            
+            loadingElement.classList.add('show');
+            resultsElement.innerHTML = '';
+            
+            // Clear existing route polylines
+            routePolylines.forEach(polyline => map.removeLayer(polyline));
+            routePolylines = [];
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/optimize`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        algorithm: selectedAlgorithm
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayOptimizationResults(result.data, result.metadata);
+                    drawOptimizedRoutes(result.data.routes);
+                } else {
+                    throw new Error(result.error);
+                }
+                
+            } catch (error) {
+                console.error('❌ Optimization failed:', error);
+                resultsElement.innerHTML = `
+                    <div style="color: #e74c3c; padding: 1rem; background: #fdf2f2; border-radius: 8px;">
+                        <strong>Optimization Failed:</strong> ${error.message}
+                    </div>
+                `;
+            } finally {
+                loadingElement.classList.remove('show');
+            }
+        }
+
+        /**
+         * Display optimization results
+         */
+        function displayOptimizationResults(data, metadata) {
+            const resultsElement = document.getElementById('optimizationResults');
+            
+            resultsElement.innerHTML = `
+                <div class="optimization-results">
+                    <h4>🎯 Optimization Results (${metadata.algorithm})</h4>
+                    <div class="route-summary">
+                        <span>Total Distance: <strong>${data.totalDistance.toFixed(2)} km</strong></span>
+                        <span>Duration: <strong>${(data.totalDuration / 60).toFixed(1)} hours</strong></span>
+                    </div>
+                    <div class="route-summary">
+                        <span>Vehicles Used: <strong>${metadata.vehiclesUsed}</strong></span>
+                        <span>Deliveries: <strong>${metadata.deliveriesOptimized}</strong></span>
+                    </div>
+                    <div class="route-summary">
+                        <span>Algorithm: <strong>${metadata.algorithm}</strong></span>
+                        <span>Time: <strong>${metadata.optimizationTime}ms</strong></span>
+                    </div>
+                    <div class="route-summary" style="background: #e8f5e8;">
+                        <span>✅ Stored in PostgreSQL</span>
+                        <span>✅ Cached in Redis</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Draw optimized routes on map
+         */
+        function drawOptimizedRoutes(routes) {
+            const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
+            
+            routes.forEach((route, index) => {
+                if (route.deliveries && route.deliveries.length > 0) {
+                    const routeCoords = route.deliveries
+                        .filter(delivery => delivery.position)
+                        .map(delivery => delivery.position);
+                    
+                    if (routeCoords.length > 1) {
+                        const polyline = L.polyline(routeCoords, {
+                            color: colors[index % colors.length],
+                            weight: 4,
+                            opacity: 0.8
+                        }).addTo(map);
+                        
+                        polyline.bindPopup(`
+                            <strong>Route ${index + 1}</strong><br>
+                            Vehicle: ${route.vehicleId}<br>
+                            Distance: ${route.distance.toFixed(2)} km<br>
+                            Duration: ${(route.duration / 60).toFixed(1)} hours<br>
+                            Load: ${route.load} kg
+                        `);
+                        
+                        routePolylines.push(polyline);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Add vehicle to database
+         */
+        async function addVehicle() {
+            const name = document.getElementById('vehicleName').value;
+            const type = document.getElementById('vehicleType').value;
+            const capacity = parseInt(document.getElementById('vehicleCapacity').value);
+            const driverName = document.getElementById('driverName').value;
+            
+            if (!name || !capacity) {
+                alert('Please fill in vehicle name and capacity');
+                return;
+            }
+            
+            try {
+                // Get a random location in San Francisco area
+                const lat = 37.7749 + (Math.random() - 0.5) * 0.1;
+                const lng = -122.4194 + (Math.random() - 0.5) * 0.1;
+                
+                const response = await fetch(`${API_BASE}/api/vehicles`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name,
+                        vehicleType: type,
+                        capacity,
+                        position: [lat, lng],
+                        driverName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('Vehicle added to PostgreSQL database successfully!');
+                    
+                    // Clear form
+                    document.getElementById('vehicleName').value = '';
+                    document.getElementById('vehicleCapacity').value = '';
+                    document.getElementById('driverName').value = '';
+                    
+                    // Reload data
+                    loadFleetData();
+                } else {
+                    throw new Error(result.error);
+                }
+                
+            } catch (error) {
+                console.error('❌ Failed to add vehicle:', error);
+                alert('Failed to add vehicle: ' + error.message);
+            }
+        }
+
+        /**
+         * Add delivery at clicked location
+         */
+        async function addDeliveryAtLocation(lat, lng) {
+            const address = prompt('Enter delivery address:');
+            if (!address) return;
+            
+            const weight = prompt('Enter package weight (kg):', '25');
+            if (!weight) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/deliveries`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        address,
+                        position: [lat, lng],
+                        weight: parseInt(weight),
+                        priority: 'medium'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('Delivery added to PostgreSQL database successfully!');
+                    loadFleetData();
+                } else {
+                    throw new Error(result.error);
+                }
+                
+            } catch (error) {
+                console.error('❌ Failed to add delivery:', error);
+                alert('Failed to add delivery: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
