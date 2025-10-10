@@ -2,7 +2,8 @@ import {
   Vehicle, 
   Delivery, 
   OptimizedRoute, 
-  OptimizationOptions, 
+  OptimizationOptions,
+  OptimizationObjective,
   OptimizationResult,
   Position 
 } from './openroute-types'
@@ -78,7 +79,8 @@ export class AdvancedRouteOptimizer {
       return finalResult
       
     } catch (error) {
-      throw new Error(`Route optimization failed: ${error.message}`)
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Route optimization failed: ${message}`)
     }
   }
   
@@ -133,11 +135,8 @@ export class AdvancedRouteOptimizer {
     // Generate solutions optimized for different objective combinations
     for (let i = 0; i < objectives.length; i++) {
       for (let j = i; j < objectives.length; j++) {
-        const weightedObjectives = objectives.map((obj, index) => ({
-          ...obj,
-          weight: index === i ? 0.7 : index === j ? 0.3 : 0
-        }))
-        
+        const weightedObjectives = this.buildWeightedObjectives(objectives, i, j)
+
         const options: OptimizationOptions = {
           algorithm: 'genetic',
           objectives: weightedObjectives,
@@ -387,6 +386,43 @@ export class AdvancedRouteOptimizer {
   
   private analyzeTradeoffs(solutions: OptimizationResult[], objectives: ObjectiveFunction[]): TradeoffAnalysis {
     return { summary: 'Analysis pending' } // Placeholder
+  }
+
+  private buildWeightedObjectives(
+    objectives: ObjectiveFunction[],
+    primaryIndex: number,
+    secondaryIndex: number
+  ): OptimizationObjective[] {
+    const allowedTypes: OptimizationObjective['type'][] = [
+      'minimize_distance',
+      'minimize_time',
+      'minimize_cost',
+      'maximize_efficiency',
+      'balance_load'
+    ]
+
+    const weighted = objectives.map((obj, index) => ({
+      ...obj,
+      weight: index === primaryIndex ? 0.7 : index === secondaryIndex ? 0.3 : 0
+    }))
+
+    const normalised = weighted.flatMap((obj) => {
+      if (allowedTypes.includes(obj.type as OptimizationObjective['type'])) {
+        return [{ ...obj, type: obj.type as OptimizationObjective['type'] }]
+      }
+      return []
+    })
+
+    if (normalised.length > 0) {
+      return normalised
+    }
+
+    return [
+      {
+        type: 'minimize_distance',
+        weight: 1
+      }
+    ]
   }
 }
 

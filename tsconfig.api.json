@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2019",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "rootDir": ".",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "typeRoots": ["./types"],
+    "declaration": true,
+    "sourceMap": true
+  },
+  "include": [
+    "src/api/**/*.ts",
+    "openroute-*.ts",
+    "openroute-realtime-tracker.ts",
+    "openroute-optimization-techniques.ts",
+    "openroute-types.ts",
+    "types/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}
