@@ -55,11 +55,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # After package-lock.json is committed, you can enable:
-          # cache: 'npm'
-          # cache-dependency-path: |
-          #   package-lock.json
-          #   **/package-lock.json
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            **/package-lock.json
 
       - name: Install system clients
         run: |
