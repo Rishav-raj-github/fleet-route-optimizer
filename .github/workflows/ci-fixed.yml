@@ -12,6 +12,8 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     services:
       postgres:
         image: postgis/postgis:16-3.4
@@ -25,6 +27,7 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+
       redis:
         image: redis:7-alpine
         ports: ["6379:6379"]
@@ -33,6 +36,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+
     env:
       NODE_ENV: test
       DB_HOST: localhost
@@ -42,24 +46,39 @@ jobs:
       DB_NAME: fro_test
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/fro_test
       REDIS_URL: redis://localhost:6379
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
+          # NOTE: leave cache off until package-lock.json is committed.
+          # then add:
+          # cache: 'npm'
+          # cache-dependency-path: |
+          #   package-lock.json
+          #   **/package-lock.json
+
       - name: Install system clients
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client redis-tools
+
       - name: Install deps (prefer lockfile; fallback to npm install)
         run: |
           if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ] || [ -f yarn.lock ]; then
-              echo "Lockfile found → using deterministic install"
-              npm ci || npm ci --include=dev
+            echo "Lockfile found → using deterministic install"
+            npm ci || npm ci --include=dev
           else
-              echo "No lockfile found → falling back to npm install"
-          npm install --no-audit --no-fund
+            echo "No lockfile found → falling back to npm install"
+            npm install --no-audit --no-fund
           fi
+
+      - name: Show package scripts (debug)
+        run: node -p "require('./package.json').scripts"
 
       - name: Wait for Postgres
         run: |
@@ -68,23 +87,53 @@ jobs:
             echo "Waiting for Postgres..."
             sleep 2
           done
+          psql "$DATABASE_URL" -c "SELECT version();"
+
       - name: Enable PostGIS
-        run: psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
-      - name: Run DB migrations (best-effort)
         run: |
-          npm run db:setup || \
-          npm run migrate || \
-          npx prisma migrate deploy || \
-          npx knex migrate:latest || \
-          echo "No known migration script found."
-      - name: API tests (best-effort)
+          psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          psql "$DATABASE_URL" -c "SELECT name, installed_version FROM pg_available_extensions WHERE name LIKE 'postgis%';"
+
+      - name: Run DB migrations
         run: |
-          npm test || \
-          npm run test:unit || \
-          npm run test:integration || \
-          node example-tests.js || \
-          echo "No API test script found."
-      - name: Web unit tests (if present)
+          if npm run -s | grep -q 'db:setup'; then
+            npm run db:setup
+          elif npm run -s | grep -q 'migrate'; then
+            npm run migrate
+          elif npx --yes prisma --version >/dev/null 2>&1; then
+            npx prisma migrate deploy
+          elif npx --yes knex --version >/dev/null 2>&1; then
+            npx knex migrate:latest
+          else
+            echo "No known migration script found; continuing without migrations"
+          fi
+
+      - name: API tests
         run: |
-          npm run test:web || \
-          echo "No web unit test script found."
+          if npm run -s | grep -qE '(^|\s)test($|:)'; then
+            npm test
+          elif npm run -s | grep -q 'test:unit'; then
+            npm run test:unit
+          elif npm run -s | grep -q 'test:integration'; then
+            npm run test:integration
+          else
+            echo "No test scripts found"; exit 1
+          fi
+
+      - name: Web unit tests (optional)
+        run: |
+          if npm run -s | grep -q 'test:web'; then
+            npm run test:web
+          else
+            echo "No web test script; skipping"
+          fi
+
+      - name: Upload coverage (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage/**
+            coverage.*/**
+          if-no-files-found: ignore
