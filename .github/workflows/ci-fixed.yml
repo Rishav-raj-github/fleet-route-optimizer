@@ -51,8 +51,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client redis-tools
-      - name: Install deps
-        run: npm ci
+      - name: Install deps (prefer lockfile; fallback to npm install)
+        run: |
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ] || [ -f yarn.lock ]; then
+              echo "Lockfile found → using deterministic install"
+              npm ci || npm ci --include=dev
+          else
+              echo "No lockfile found → falling back to npm install"
+          npm install --no-audit --no-fund
+          fi
+
       - name: Wait for Postgres
         run: |
           for i in {1..30}; do
