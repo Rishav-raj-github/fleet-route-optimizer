@@ -55,8 +55,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # NOTE: leave cache off until package-lock.json is committed.
-          # then add:
+          # After package-lock.json is committed, you can enable:
           # cache: 'npm'
           # cache-dependency-path: |
           #   package-lock.json
@@ -96,16 +95,19 @@ jobs:
 
       - name: Run DB migrations
         run: |
+          set -e
           if npm run -s | grep -q 'db:setup'; then
             npm run db:setup
-          elif npm run -s | grep -q 'migrate'; then
+          elif npm run -s | grep -q '^ *migrate *:'; then
             npm run migrate
-          elif npx --yes prisma --version >/dev/null 2>&1; then
-            npx prisma migrate deploy
-          elif npx --yes knex --version >/dev/null 2>&1; then
-            npx knex migrate:latest
+          elif [ -f prisma/schema.prisma ] || [ -f schema.prisma ]; then
+            echo "Detected Prisma schema → running prisma migrate deploy"
+            npx --yes prisma migrate deploy
+          elif [ -f knexfile.js ] || [ -f knexfile.ts ]; then
+            echo "Detected Knex config → running knex migrate:latest"
+            npx --yes knex migrate:latest
           else
-            echo "No known migration script found; continuing without migrations"
+            echo "No known migration tool or schema found; skipping"
           fi
 
       - name: API tests
