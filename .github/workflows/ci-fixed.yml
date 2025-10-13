@@ -1,0 +1,140 @@
+name: CI (npm, PostGIS, Redis)
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fro_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres -d fro_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: fro_test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/fro_test
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            **/package-lock.json
+
+      - name: Install system clients
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client redis-tools
+
+      - name: Install deps (prefer lockfile; fallback to npm install)
+        run: |
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ] || [ -f yarn.lock ]; then
+            echo "Lockfile found → using deterministic install"
+            npm ci || npm ci --include=dev
+          else
+            echo "No lockfile found → falling back to npm install"
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Show package scripts (debug)
+        run: node -p "require('./package.json').scripts"
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -d fro_test -U postgres && break
+            echo "Waiting for Postgres..."
+            sleep 2
+          done
+          psql "$DATABASE_URL" -c "SELECT version();"
+
+      - name: Enable PostGIS
+        run: |
+          psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          psql "$DATABASE_URL" -c "SELECT name, installed_version FROM pg_available_extensions WHERE name LIKE 'postgis%';"
+
+      - name: Run DB migrations
+        run: |
+          set -e
+          if npm run -s | grep -q 'db:setup'; then
+            npm run db:setup
+          elif npm run -s | grep -q '^ *migrate *:'; then
+            npm run migrate
+          elif [ -f prisma/schema.prisma ] || [ -f schema.prisma ]; then
+            echo "Detected Prisma schema → running prisma migrate deploy"
+            npx --yes prisma migrate deploy
+          elif [ -f knexfile.js ] || [ -f knexfile.ts ]; then
+            echo "Detected Knex config → running knex migrate:latest"
+            npx --yes knex migrate:latest
+          else
+            echo "No known migration tool or schema found; skipping"
+          fi
+
+      - name: API tests (if present)
+        run: |
+          if npm run -s | grep -qE '(^|\s)test($|:)'; then
+            npm test
+          elif npm run -s | grep -q 'test:unit'; then
+            npm run test:unit
+          elif npm run -s | grep -q 'test:integration'; then
+            npm run test:integration
+          else
+            echo "No test scripts found; skipping"
+          fi
+
+      - name: Web unit tests (optional)
+        run: |
+          if npm run -s | grep -q 'test:web'; then
+            npm run test:web
+          else
+            echo "No web test script; skipping"
+          fi
+
+      - name: Upload coverage (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage/**
+            coverage.*/**
+          if-no-files-found: ignore
