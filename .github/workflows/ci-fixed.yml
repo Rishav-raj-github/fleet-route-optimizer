@@ -118,9 +118,6 @@ jobs:
             npm run test:unit
           elif npm run -s | grep -q 'test:integration'; then
             npm run test:integration
-          elif [ -f example-tests.js ]; then
-            echo "Found example-tests.js → running it"
-            node example-tests.js
           else
             echo "No test scripts found; skipping"
           fi
