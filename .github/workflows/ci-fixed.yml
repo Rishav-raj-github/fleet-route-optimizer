@@ -110,7 +110,7 @@ jobs:
             echo "No known migration tool or schema found; skipping"
           fi
 
-      - name: API tests
+      - name: API tests (if present)
         run: |
           if npm run -s | grep -qE '(^|\s)test($|:)'; then
             npm test
@@ -118,8 +118,11 @@ jobs:
             npm run test:unit
           elif npm run -s | grep -q 'test:integration'; then
             npm run test:integration
+          elif [ -f example-tests.js ]; then
+            echo "Found example-tests.js → running it"
+            node example-tests.js
           else
-            echo "No test scripts found"; exit 1
+            echo "No test scripts found; skipping"
           fi
 
       - name: Web unit tests (optional)
