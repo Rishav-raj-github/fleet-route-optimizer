@@ -1,10 +1,69 @@
+# name: CI
+# on: pull_request
+# jobs:
+#   build-and-test:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: actions/setup-node@v4
+#         with: { node-version: '20' }
+#       - run: echo "Legacy workflow disabled in favor of ci-fixed.yml ✅"
 name: CI
-on: pull_request
+on:
+  push:
+  pull_request:
+
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        ports: [ "5432:5432" ]
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd="pg_isready -U postgres -d testdb"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=6
+
+      redis:
+        image: redis:7
+        ports: [ "6379:6379" ]
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: testdb
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/testdb
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      NODE_ENV: test
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: echo "Legacy workflow disabled in favor of ci-fixed.yml ✅"
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Build API
+        run: npm run build -- --project tsconfig.api.json
+      - name: Prepare test DB (optional SQL seed)
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client netcat-openbsd
+          for i in {1..30}; do
+            nc -z 127.0.0.1 5432 && echo "Postgres up" && break
+            echo "Waiting for Postgres..."; sleep 2
+          done
+          if [ -f test-scripts/init-test-db.sql ]; then
+            psql "$DATABASE_URL" -f test-scripts/init-test-db.sql || true
+          fi
+      - name: Run tests
+        run: npm test -- --runInBand
