@@ -53,8 +53,12 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+
+      # If you want builds for type checks, keep this:
       - name: Build API
-        run: npm run build -- --project tsconfig.api.json
+        run: npm run build
+      # If you prefer faster CI with ts-node tests, you can delete the Build step above.
+
       - name: Prepare test DB (optional SQL seed)
         run: |
           sudo apt-get update && sudo apt-get install -y postgresql-client netcat-openbsd
@@ -65,5 +69,6 @@ jobs:
           if [ -f test-scripts/init-test-db.sql ]; then
             psql "$DATABASE_URL" -f test-scripts/init-test-db.sql || true
           fi
+
       - name: Run tests
         run: npm test -- --runInBand
