@@ -24,7 +24,7 @@ services:
     image: redis:6-alpine
     ports:
       - "6380:6379"
-    command: redis-server --appendonly yes
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_test_data:/data
     healthcheck:
@@ -41,8 +41,8 @@ services:
     ports:
       - "8082:8081"
     environment:
-      - NODE_ENV=test
-      - WS_PORT=8081
+      NODE_ENV: test
+      WS_PORT: 8081
     depends_on:
       - redis-test
     volumes:
@@ -52,14 +52,14 @@ services:
   api-test:
     build:
       context: .
-      dockerfile: test-dockerfiles/Dockerfile.api-test
+      dockerfile: Dockerfile.api
     ports:
-      - "8001:8000"
+      - "8001:3001"  # host:container; API listens on 3001 in container
     environment:
-      - NODE_ENV=test
-      - DATABASE_URL=postgres://test_user:test_password@postgres-test:5432/openroute_test
-      - REDIS_URL=redis://redis-test:6379
-      - JWT_SECRET=test-secret-key
+      NODE_ENV: production
+      DATABASE_URL: postgres://test_user:test_password@postgres-test:5432/openroute_test
+      REDIS_URL: redis://redis-test:6379
+      JWT_SECRET: test-secret-key
     depends_on:
       postgres-test:
         condition: service_healthy
@@ -68,6 +68,12 @@ services:
     volumes:
       - ./packages:/app/packages
       - ./test-scripts:/app/test-scripts
+    command: ["node", "dist/src/api/start.js"]  # matches your tsconfig output
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Test Web Interface
   web-test:
@@ -77,9 +83,9 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - NODE_ENV=test
-      - REACT_APP_API_URL=http://localhost:8001
-      - REACT_APP_WS_URL=ws://localhost:8082
+      NODE_ENV: test
+      REACT_APP_API_URL: http://localhost:8001
+      REACT_APP_WS_URL: ws://localhost:8082
     depends_on:
       - api-test
       - websocket-test
