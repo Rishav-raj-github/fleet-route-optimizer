@@ -2,7 +2,7 @@
   "name": "fleet-route-optimizer",
   "version": "1.0.0",
   "description": "Open source fleet management and route optimization platform with real-time GPS tracking",
-  "homepage": "https://github.com/vkondepati/fleet-route-optimizer",
+  "homepage": "https://github.com/Rishav-raj-github/fleet-route-optimizer",
   "keywords": [
     "fleet-management",
     "route-optimization",
@@ -20,13 +20,13 @@
     "react"
   ],
   "author": "Fleet Route Optimizer Contributors",
-  "license": "MIT",
+  "license": "BSD-2-Clause",
   "repository": {
     "type": "git",
-    "url": "https://github.com/vkondepati/fleet-route-optimizer.git"
+    "url": "https://github.com/Rishav-raj-github/fleet-route-optimizer.git"
   },
   "bugs": {
-    "url": "https://github.com/vkondepati/fleet-route-optimizer/issues"
+    "url": "https://github.com/Rishav-raj-github/fleet-route-optimizer/issues"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
